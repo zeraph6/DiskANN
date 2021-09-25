@@ -49,10 +49,9 @@ else:
         diskannpy.omp_set_num_threads(num_threads)
 
         qs = time.time()
-        ids, dists = index.batch_search_numpy_input(query_data_numpy, query_aligned_dims, 
-                                                    num_queries, recall_at, L, W, num_threads)
+        [ids, dists], stats = index.batch_search_numpy_input(query_data_numpy, query_aligned_dims, 
+                                                             num_queries, recall_at, L, W, num_threads)
         qe = time.time()
-        latency_stats = float((qe - qs) * 1000000)
         qps = (num_queries / (qe - qs))
 
         recall = diskannpy.calculate_recall_numpy_input(num_queries, ground_truth_ids,

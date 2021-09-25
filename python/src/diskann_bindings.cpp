@@ -162,12 +162,13 @@ struct DiskANNIndex {
     py::array_t<float>    dists({num_queries, knn});
 
     std::vector<_u64> u64_ids(knn * num_queries);
+    diskann::QueryStats *stats = new diskann::QueryStats[num_queries];
 
 #pragma omp parallel for schedule(dynamic, 1)
     for (_u64 i = 0; i < num_queries; i++) {
-      pq_flash_index->cached_beam_search(queries.data(i), knn, l_search,
-                                         u64_ids.data() + i * knn,
-                                         dists.mutable_data(i), beam_width);
+      pq_flash_index->cached_beam_search(
+          queries.data(i), knn, l_search, u64_ids.data() + i * knn,
+          dists.mutable_data(i), beam_width, stats + i);
     }
 
     auto r = ids.mutable_unchecked();
@@ -175,7 +176,26 @@ struct DiskANNIndex {
       for (_u64 j = 0; j < knn; ++j)
         r(i, j) = (unsigned) u64_ids[i * knn + j];
 
-    return std::make_pair(ids, dists);
+
+    std::unordered_map<std::string, double> collective_stats;
+    collective_stats["mean_latency"]= diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.total_us; });
+
+    collective_stats["latency_999"] = diskann::get_percentile_stats(
+        stats, num_queries, 0.999,
+        [](const diskann::QueryStats &stats) { return stats.total_us; });
+
+    collective_stats["mean_ios"] = diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.n_ios; });
+
+    collective_stats["mean_cmps"] = diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.n_cmps; });
+
+    delete[] stats;
+    return std::make_pair(std::make_pair(ids, dists), collective_stats);
   }
 
   auto batch_range_search_numpy_input(
@@ -192,11 +212,14 @@ struct DiskANNIndex {
     auto offsets_mutable = offsets.mutable_unchecked();
     offsets_mutable(0) = 0;
 
+    diskann::QueryStats *stats = new diskann::QueryStats[num_queries];
+
+
 #pragma omp parallel for schedule(dynamic, 1)
     for (_u64 i = 0; i < num_queries; i++) {
       offsets_mutable(i + 1) = pq_flash_index->range_search(
           queries.data(i), range, l_search, u64_ids.data() + i * l_search,
-          dists.mutable_data(i * l_search), beam_width);
+          dists.mutable_data(i * l_search), beam_width, stats+i);
     }
     
     auto   ids_mutable = ids.mutable_unchecked();
@@ -209,7 +232,26 @@ struct DiskANNIndex {
       }
       offsets_mutable(i + 1) = offsets_mutable(i) + offsets_mutable(i + 1);
     }
-    return std::make_pair(offsets, std::make_pair(ids, dists));
+
+    std::unordered_map<std::string, double> collective_stats;
+    collective_stats["mean_latency"] = diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.total_us; });
+
+    collective_stats["latency_999"] = diskann::get_percentile_stats(
+        stats, num_queries, 0.999,
+        [](const diskann::QueryStats &stats) { return stats.total_us; });
+
+    collective_stats["mean_ios"] = diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.n_ios; });
+
+    collective_stats["mean_cmps"] = diskann::get_mean_stats(
+        stats, num_queries,
+        [](const diskann::QueryStats &stats) { return stats.n_cmps; });
+
+    delete[] stats;
+    return std::make_pair(std::make_pair(offsets, std::make_pair(ids, dists)), collective_stats);
   }
 };
 
