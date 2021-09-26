@@ -186,11 +186,11 @@ struct DiskANNIndex {
         stats, num_queries, 0.999,
         [](const diskann::QueryStats &stats) { return stats.total_us; });
 
-    collective_stats["mean_ios"] = diskann::get_mean_stats(
+    collective_stats["ssd_ios"] = diskann::get_mean_stats(
         stats, num_queries,
         [](const diskann::QueryStats &stats) { return stats.n_ios; });
 
-    collective_stats["mean_cmps"] = diskann::get_mean_stats(
+    collective_stats["dist_comps"] = diskann::get_mean_stats(
         stats, num_queries,
         [](const diskann::QueryStats &stats) { return stats.n_cmps; });
 
