@@ -455,6 +455,7 @@ namespace diskann {
       if (best_L_nodes[k].flag) {
         best_L_nodes[k].flag = false;
         auto n = best_L_nodes[k].id;
+        hops++;
         expanded_nodes_info.emplace_back(best_L_nodes[k]);
         expanded_nodes_ids.insert(n);
 
